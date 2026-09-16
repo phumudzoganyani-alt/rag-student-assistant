@@ -5,14 +5,14 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 import chromadb
 
+from app.website import get_website_pages
 
-# Paths
+
 PDF_PATH = Path("data/handbook.pdf")
 CHROMA_PATH = "chroma_db"
 
 
 def load_handbook():
-    """Load the handbook and extract text page by page."""
     reader = PdfReader(PDF_PATH)
 
     documents = []
@@ -23,14 +23,33 @@ def load_handbook():
         if text and text.strip():
             documents.append({
                 "text": text,
-                "page": page_number
+                "source": "Student Handbook",
+                "page": page_number,
+                "url": None
             })
 
     return documents
 
 
+def load_website():
+    print("Crawling ZAIO website...")
+
+    pages = get_website_pages()
+
+    documents = []
+
+    for page in pages:
+        documents.append({
+            "text": page["text"],
+            "source": "ZAIO Website",
+            "page": None,
+            "url": page["url"]
+        })
+
+    return documents
+
+
 def split_documents(documents):
-    """Split handbook text into smaller chunks."""
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,
         chunk_overlap=150
@@ -39,20 +58,22 @@ def split_documents(documents):
     chunks = []
 
     for document in documents:
-        split_texts = splitter.split_text(document["text"])
+        split_texts = splitter.split_text(
+            document["text"]
+        )
 
         for text in split_texts:
             chunks.append({
                 "text": text,
-                "page": document["page"]
+                "source": document["source"],
+                "page": document["page"],
+                "url": document["url"]
             })
 
     return chunks
 
 
 def store_embeddings(chunks):
-    """Generate embeddings and store them in ChromaDB."""
-
     print("Loading embedding model...")
 
     model = SentenceTransformer(
@@ -66,18 +87,25 @@ def store_embeddings(chunks):
     )
 
     collection = client.get_or_create_collection(
-        name="handbook"
+        name="knowledge_base"
     )
 
-    # Remove old data so we don't create duplicates
+    # Remove old data so we do not create duplicates
     existing = collection.get()
 
     if existing["ids"]:
-        collection.delete(ids=existing["ids"])
+        collection.delete(
+            ids=existing["ids"]
+        )
 
-    texts = [chunk["text"] for chunk in chunks]
+    texts = [
+        chunk["text"]
+        for chunk in chunks
+    ]
 
-    print(f"Generating embeddings for {len(texts)} chunks...")
+    print(
+        f"Generating embeddings for {len(texts)} chunks..."
+    )
 
     embeddings = model.encode(
         texts,
@@ -89,12 +117,14 @@ def store_embeddings(chunks):
         for i in range(len(chunks))
     ]
 
-    metadatas = [
-        {
-            "page": chunk["page"]
-        }
-        for chunk in chunks
-    ]
+    metadatas = []
+
+    for chunk in chunks:
+        metadatas.append({
+            "source": chunk["source"],
+            "page": chunk["page"] or 0,
+            "url": chunk["url"] or ""
+        })
 
     collection.add(
         ids=ids,
@@ -104,23 +134,55 @@ def store_embeddings(chunks):
     )
 
     print()
-    print("Successfully stored handbook in ChromaDB!")
+    print("Successfully stored knowledge base in ChromaDB!")
     print(f"Total chunks: {len(chunks)}")
+
+    handbook_chunks = sum(
+        1 for chunk in chunks
+        if chunk["source"] == "Student Handbook"
+    )
+
+    website_chunks = sum(
+        1 for chunk in chunks
+        if chunk["source"] == "ZAIO Website"
+    )
+
+    print(f"Handbook chunks: {handbook_chunks}")
+    print(f"Website chunks: {website_chunks}")
 
 
 def main():
-    print("Loading handbook...")
+    print("Loading Student Handbook...")
 
-    documents = load_handbook()
+    handbook_documents = load_handbook()
 
     print(
-        f"Extracted text from {len(documents)} pages."
+        f"Extracted handbook text from "
+        f"{len(handbook_documents)} pages."
     )
 
-    chunks = split_documents(documents)
+    website_documents = load_website()
 
     print(
-        f"Created {len(chunks)} text chunks."
+        f"Extracted ZAIO content from "
+        f"{len(website_documents)} pages."
+    )
+
+    all_documents = (
+        handbook_documents +
+        website_documents
+    )
+
+    print(
+        f"Total documents: {len(all_documents)}"
+    )
+
+    chunks = split_documents(
+        all_documents
+    )
+
+    print(
+        f"Created {len(chunks)} total chunks."
     )
 
     store_embeddings(chunks)

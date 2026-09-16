@@ -5,9 +5,9 @@ from app.rag import retrieve, generate_answer
 
 
 app = FastAPI(
-    title="Student Handbook RAG Assistant",
-    description="AI assistant that answers questions using the student handbook.",
-    version="1.0.0"
+    title="ZAIO Student RAG Assistant",
+    description="AI assistant that answers questions using the ZAIO Student Handbook and Website.",
+    version="2.0.0"
 )
 
 
@@ -18,7 +18,7 @@ class QuestionRequest(BaseModel):
 @app.get("/")
 def home():
     return {
-        "message": "Student Handbook RAG Assistant is running"
+        "message": "ZAIO Student RAG Assistant is running"
     }
 
 
@@ -35,25 +35,12 @@ def ask_question(request: QuestionRequest):
 
     results = retrieve(question)
 
-    if not results:
-        return {
-            "answer": "The information is not available in the handbook.",
-            "source": None
-        }
-
     result = generate_answer(
         question,
         results
     )
 
-    source_page = result["source_page"]
-
-    source = None
-
-    if source_page is not None:
-        source = f"Page {source_page}"
-
     return {
         "answer": result["answer"],
-        "source": source
+        "source": result["source"]
     }

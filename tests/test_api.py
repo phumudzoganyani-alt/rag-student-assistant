@@ -10,8 +10,9 @@ def test_home():
     response = client.get("/")
 
     assert response.status_code == 200
+
     assert response.json()["message"] == (
-        "Student Handbook RAG Assistant is running"
+        "ZAIO Student RAG Assistant is running"
     )
 
 
@@ -29,7 +30,7 @@ def test_empty_question():
     assert data["source"] is None
 
 
-def test_valid_question():
+def test_handbook_question():
     response = client.post(
         "/ask",
         json={
@@ -45,14 +46,33 @@ def test_valid_question():
     assert "source" in data
 
     assert "6 months" in data["answer"].lower()
-    assert data["source"] == "Page 6"
+    assert data["source"] == "Student Handbook - Page 6"
+
+
+def test_website_question():
+    response = client.post(
+        "/ask",
+        json={
+            "question": "What bootcamps does ZAIO offer?"
+        }
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert "answer" in data
+    assert "source" in data
+
+    assert "bootcamp" in data["answer"].lower()
+    assert data["source"] == "https://www.zaio.io/bootcamps"
 
 
 def test_unknown_question():
     response = client.post(
         "/ask",
         json={
-            "question": "What is the university's refund policy?"
+            "question": "What is ZAIO's refund policy for university tuition?"
         }
     )
 
@@ -61,7 +81,7 @@ def test_unknown_question():
     data = response.json()
 
     assert data["answer"] == (
-        "The information is not available in the handbook."
+        "I could not find that information in the available knowledge base."
     )
 
     assert data["source"] is None
